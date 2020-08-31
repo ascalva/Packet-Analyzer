@@ -35,8 +35,13 @@ public class packet
     private int    tcp_sport;
     private int    tcp_dport;
     private int    tcp_seq_n;
-    private int    tcp_ack_n;
-    private int    tcp_off;
+    private long   tcp_ack_n;
+    private byte[] tcp_off     = new byte[1];
+    private byte[] tcp_flags   = new byte[1];
+    private int    tcp_win;
+    private byte[] tcp_check   = new byte[2];
+    private int    tcp_up;
+    private byte[] tcp_data    = new byte[64];
 
     // UDP Header
     private int    udp_sport;
@@ -66,14 +71,22 @@ public class packet
         tcp_sport = bb.getShort() & 0xFFFF;
         tcp_dport = bb.getShort() & 0xFFFF;
         tcp_seq_n = bb.getInt()   & 0xFFFFFFFF;
-        tcp_ack_n = bb.getInt()   & 0xFFFFFFFF;
+        tcp_ack_n = bb.getInt()   & 0xFFFFFFFFL;
 
+        bb.get(tcp_off);
+        bb.get(tcp_flags);
+
+        tcp_win   = bb.getShort() & 0xFFFF;
+        bb.get(tcp_check);
+
+        tcp_up    = bb.getShort() & 0xFFFF; 
+        
+        bb.get(tcp_data);
+        
         // DEBUG
-        System.out.println(tcp_sport);
-        System.out.println(tcp_dport);
-        System.out.println(tcp_seq_n);
-        System.out.println(tcp_ack_n);
+        System.out.println(tcp_up);
 
+        bytesToHex(tcp_data);
     }
     
     private void parseUDP(ByteBuffer bb)
@@ -148,5 +161,7 @@ public class packet
     {
         ByteBuffer bb = ByteBuffer.wrap(bytes);
         parse(bb);
+
+        bytesToHex(bytes);
     }
 }
