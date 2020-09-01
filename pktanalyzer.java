@@ -4,8 +4,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.ArrayIndexOutOfBoundsException;
 
-public class pktanalyzer {
-
+public class pktanalyzer 
+{
     public static void main(String[] args) {
         File packet_file      = null;
         FileInputStream s_bin = null;
@@ -29,10 +29,11 @@ public class pktanalyzer {
             // Create packet object to parse byte array.
             packet p_obj = new packet(packet_bin);
 
-            // TODO: Call p_obj method to print.
-
+            // Print packet contents and analysis.
+            p_obj.print();
         }
-
+        
+        // Error if user doesn't provide any arguments.
         catch( ArrayIndexOutOfBoundsException oobe )
         {
             System.out.println("Not enough command line arguments provided: " + oobe);
