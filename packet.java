@@ -30,7 +30,7 @@ public class packet
     private byte   ip_tos;
     private int    ip_len;
     private int    ip_id;
-    private int[]  ip_frag     = new int[2];
+    private int[]  ip_frag     = new int[3];
     private int    ip_off;
     private int    ip_ttl;
     private int    ip_p;
@@ -151,8 +151,9 @@ public class packet
         
         // Get fragment bits, or the first 3 bits from ip_off.
         // Only the last two of the three bits actually matter.
-        ip_frag[0] = getBit(ip_off, 14);
-        ip_frag[1] = getBit(ip_off, 13);
+        ip_frag[0] = getBit(ip_off, 15);
+        ip_frag[1] = getBit(ip_off, 14);
+        ip_frag[2] = getBit(ip_off, 13);
 
         bb.get(ip_check); 
         bb.get(ip_src);
@@ -211,51 +212,192 @@ public class packet
         return hex_val;
     }
 
+    private void printData(byte[] data, String header)
+    {
+        // Specify number of bytes per row (column number) and compute number of rows.
+        int col_num  = 16;
+        int row_num  = (int) Math.ceil((float) data.length / (float) col_num);
+        int cursor   = 0;
+
+        // Pre-convert byte data to ASCII chars, or a string.
+        String text  = new String(data,StandardCharsets.US_ASCII).replaceAll("\\P{Print}", ".");
+        String hex   = "%02x";
+        String nhex  = "  ";
+        String space = " ";
+        String group;
+        
+        // Print out bytes in groups of two with ASCII char equivalent on the 
+        // right side.
+        for( int row = 0; row < row_num; row++ )
+        {
+            System.out.print(header);
+            for( int col = 0; col < col_num; col++ )
+            {
+                cursor = (col_num * row) + col;
+                group  = cursor < data.length ? String.format(hex, data[cursor]) : nhex; 
+                System.out.print(group);
+                
+                // Add space every other byte (forms 2-byte groups).
+                if( col % 2 == 1 ) System.out.print(space);
+            } 
+            
+            // Print all characters using a substring of pre-converted bytes to ASCII chars
+            // and fill whatever is left of last row with additional periods.
+            System.out.format
+            (
+                "       '%s%s'\n", 
+                text.substring(col_num * row, Math.min(cursor + 1, data.length)),
+                ".".repeat(Math.max(0, cursor - data.length + 1))
+            );
+        }
+    }
+
+    private void printICMP()
+    {
+        String icmp = "ICMP:   ";
+        String endl = "\n";
+
+        System.out.println
+        (
+            icmp + "----- ICMP Header -----" + endl
+          + icmp + endl
+          + icmp + "Type = " + icmp_type + " ()" + endl
+          + icmp + "Code = " + icmp_code + endl
+          + icmp + "Checksum = " + frmtByte(icmp_check) + endl
+          + icmp
+        );
+    }
+
+    private void printTCP()
+    {
+        String tcp  = "TCP:    ";
+        String endl = "\n";
+
+        System.out.println
+        (
+            tcp + "----- TCP Header -----" + endl
+          + tcp + endl
+          + tcp + "Source port = " + tcp_sport + endl
+          + tcp + "Destination port = " + tcp_dport + endl
+          + tcp + "Sequence number = " + tcp_seq_n + endl
+          + tcp + "Acknowledgement number = " + tcp_ack_n + endl
+          + tcp + "Data offset = " + endl
+          + tcp + "Flags = " + endl
+          + tcp + String.format("      ..%d. .... = ", 0) + endl
+          + tcp + String.format("      ...%d .... = ", 0) + endl
+          + tcp + String.format("      .... %d... = ", 0) + endl
+          + tcp + String.format("      .... .%d.. = ", 0) + endl
+          + tcp + String.format("      .... ..%d. = ", 0) + endl
+          + tcp + String.format("      .... ...%d = ", 0) + endl
+          + tcp + "Window = " + tcp_win + endl
+          + tcp + "Checksum = " + frmtByte(tcp_check) + endl
+          + tcp + "Urgent Pointer = " + tcp_up + endl
+          + tcp + "No options" + endl
+          + tcp + endl
+          + tcp + String.format("Data: (first %d bytes)", DATA_SIZE)
+        );
+        printData(tcp_data, tcp);
+    }
+
+    private void printUDP()
+    {
+        String udp  = "UDP:    ";
+        String endl = "\n";
+
+
+        System.out.println
+        (
+            udp + "----- UDP Header -----" + endl
+          + udp + endl
+          + udp + "Source port = " + udp_sport + endl
+          + udp + "Destination port = " + udp_dport + endl
+          + udp + "Length = " + udp_len + endl
+          + udp + "Checksum = " + frmtByte(udp_check) + endl
+          + udp + endl
+          + udp + String.format("Data: (first %d bytes)", DATA_SIZE)
+        );
+        printData(udp_data, udp);
+    }
+
     public void print()
     {   
         String ether    = "ETHER:  ";
         String ip       = "IP:     ";
         String endl     = "\n";
-        String frag_msg = ip_frag[0] == 1 ? "do not fragment" : "OK to fragment";
+        String frag_msg = ip_frag[1] == 1 ? "do not fragment" : "OK to fragment";
         
         // Print Ether header.
         System.out.println
-            (
-                ether + "----- Ether Header -----" + endl
-              + ether + endl
-              + ether + "Packet size = " + packet_size + " bytes" + endl
-              + ether + "Destination = " + frmtByte(ether_dhost, ":", "%02x") + "," + endl
-              + ether + "Source      = " + frmtByte(ether_shost, ":", "%02x") + "," + endl
-              + ether + "Ethertype   = " + frmtByte(ether_type, "", "%02x") + " (IP)" + endl
-              + ether 
-            );
+        (
+            ether + "----- Ether Header -----" + endl
+          + ether + endl
+          + ether + "Packet size = " + packet_size + " bytes" + endl
+
+            // MAC addresses have their bytes deliminated by a colon.
+          + ether + "Destination = " + frmtByte(ether_dhost, ":", "%02x") + "," + endl
+          + ether + "Source      = " + frmtByte(ether_shost, ":", "%02x") + "," + endl
+          + ether + "Ethertype   = " + frmtByte(ether_type, "", "%02x") + " (IP)" + endl
+          + ether 
+        );
         
         // Print IP header.
         System.out.println
-            (
-                ip + "----- IP Header -----" + endl
-              + ip + endl
-              + ip + "Version = " + ip_ver + endl
-              + ip + "Header Length = " + ip_hlen + endl
-              + ip + "Type of service = " + String.format("0x%02x", ip_tos) + endl
-              + ip + String.format("      xxx. .... = %d (precedence)", 0) + endl
-              + ip + String.format("      ...%d .... = ", 0) + endl
-              + ip + String.format("      .... %d... = ", 0) + endl
-              + ip + String.format("      .... .%d.. = ", 0) + endl
-              + ip + "Total length = " + ip_len + " bytes" + endl
-              + ip + "Identification = " + ip_id + endl
-              + ip + "Flags = " + endl
-              + ip + String.format("      .%d.. .... = %s", ip_frag[0], frag_msg) + endl
-              + ip + String.format("      ..%d. .... = %s", ip_frag[1], "last fragment") + endl
-              + ip + "Fragment offset = " + ip_off + " bytes" + endl
-              + ip + "Time to live = " + ip_ttl + " seconds/hops" + endl
-              + ip + "Protocol = " + ip_p + String.format(" (%s)", packet_type) + endl
-              + ip + "Header checksum = " + frmtByte(ip_check) + endl
-              + ip + "Source address = " + frmtByte(ip_src, ".", "%d") + endl
-              + ip + "Destination address = " + frmtByte(ip_dest, ".", "%d") + endl
-              + ip + "No options" + endl
-              + ip
-            );
+        (
+            ip + "----- IP Header -----" + endl
+          + ip + endl
+          + ip + "Version = " + ip_ver + endl
+          + ip + "Header Length = " + ip_hlen + endl
+          + ip + "Type of service = " + String.format("0x%02x", ip_tos) + endl
+            
+            // First 3 bits (precedence field) is ignored.
+          + ip + String.format("      xxx. .... = %d (precedence)", 0) + endl
+
+            // Next 4 bits are the service bits, last bit is ignored.
+            // Get bits at 3rd, 4th, 5th positions of Type of Service byte.
+          + ip + String.format("      ...%d .... = ", getBit(ip_tos, 5)) + endl
+          + ip + String.format("      .... %d... = ", getBit(ip_tos, 4)) + endl
+          + ip + String.format("      .... .%d.. = ", getBit(ip_tos, 3)) + endl
+          + ip + "Total length = " + ip_len + " bytes" + endl
+          + ip + "Identification = " + ip_id + endl
+
+            // Get the value of the first three bits of the fragment offset.
+            // In reality: |3-bit flag|13-bit fragment offset|
+            // Stored above data as a single short (16 bits).
+          + ip + "Flags = " + String.format("0x%02x", ip_off >>> 12) + endl
+            
+            // Use the first 3 bits (first one ignored) for fragment info/flag.
+          + ip + String.format("      .%d.. .... = %s", ip_frag[1], frag_msg) + endl
+          + ip + String.format("      ..%d. .... = %s", ip_frag[2], "last fragment") + endl
+
+            // Remove first three bits.
+            // Short sits in int, only the 16 right bits are used. Need to left shift 
+            // by 16 (unused) bits + 3 (fragment) bits, then shift right using the right
+            // unsigned bit shift operator.
+          + ip + "Fragment offset = " + ((ip_off << 19) >>> 19) + " bytes" + endl //TODO
+          + ip + "Time to live = " + ip_ttl + " seconds/hops" + endl
+          + ip + "Protocol = " + ip_p + String.format(" (%s)", packet_type) + endl
+          + ip + "Header checksum = " + frmtByte(ip_check) + endl
+          + ip + "Source address = " + frmtByte(ip_src, ".", "%d") + endl
+          + ip + "Destination address = " + frmtByte(ip_dest, ".", "%d") + endl
+          + ip + "No options" + endl
+          + ip
+        );
+
+        switch( ip_p )
+        {
+            case P_NUM_ICMP : printICMP();
+                break;
+            
+            case P_NUM_TCP  : printTCP();
+                break;
+
+            case P_NUM_UDP  : printUDP();
+                break;
+
+            default : System.out.format("Unknown protocol: %s\n", ip_p);
+                break;
+
+        }
     }
 
     public packet(byte[] bytes)
