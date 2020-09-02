@@ -36,17 +36,17 @@ public class pktanalyzer
         // Error if user doesn't provide any arguments.
         catch( ArrayIndexOutOfBoundsException oobe )
         {
-            System.out.println("Not enough command line arguments provided: " + oobe);
+            System.out.println("Usage: java pktanalyzer datafile");
         }
 
         catch( FileNotFoundException fnfe )
         {
-            System.out.println("File not found" + fnfe);
+            System.out.format("File not found: %s\n", args[0]);
         }
 
         catch( IOException ioe )
         {
-            System.out.println("Exception while reading file" + ioe);
+            System.out.format("Exception while reading file: %s\n", args[0]);
         }
         
         // Cleanup and close file stream.

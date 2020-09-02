@@ -48,7 +48,7 @@ public class packet
     private int    tcp_dport;
     private long   tcp_seq_n;
     private long   tcp_ack_n;
-    private byte[] tcp_off     = new byte[1];
+    private int    tcp_off;
     private byte[] tcp_flags   = new byte[1];
     private int    tcp_win;
     private byte[] tcp_check   = new byte[2];
@@ -83,7 +83,10 @@ public class packet
         tcp_seq_n = bb.getInt()   & BIT_MASK_LONG;
         tcp_ack_n = bb.getInt()   & BIT_MASK_LONG;
 
-        bb.get(tcp_off);
+        // Data offset contained in first 4 bits.
+        tcp_off   = (bb.get()     & BIT_MASK_CHAR) >>> 4;
+
+        // Stored as byte for later hex print.
         bb.get(tcp_flags);
 
         tcp_win   = bb.getShort() & BIT_MASK_SHORT;
@@ -185,7 +188,7 @@ public class packet
         System.out.println("Pos   Hex  Dec");
 
         for (int j = 0; j < bytes.length; j++) {
-            int v = bytes[j] & 0xFF;
+            int v = bytes[j] & BIT_MASK_CHAR;
 
             // Also can use Integer.toHexString() to get hex.
             System.out.format("%3d  0x%02X  %3d %c\n", j, v, v, text.charAt(j));
@@ -197,7 +200,7 @@ public class packet
     {
         String arr[] = new String[bytes.length];
         for( int i = 0; i < bytes.length; i++ )
-            arr[i] = String.format(format, bytes[i] & 0xFF);
+            arr[i] = String.format(format, bytes[i] & BIT_MASK_CHAR);
 
         return String.join(delim, arr);
     }
@@ -270,8 +273,12 @@ public class packet
 
     private void printTCP()
     {
-        String tcp  = "TCP:    ";
-        String endl = "\n";
+        String tcp   = "TCP:    ";
+        String endl  = "\n";
+        
+        // Define first bit position from which to start decrementing. Used to
+        // build flag 'matrix'.
+        int flag_cnt = 5;
 
         System.out.println
         (
@@ -281,14 +288,18 @@ public class packet
           + tcp + "Destination port = " + tcp_dport + endl
           + tcp + "Sequence number = " + tcp_seq_n + endl
           + tcp + "Acknowledgement number = " + tcp_ack_n + endl
-          + tcp + "Data offset = " + endl
-          + tcp + "Flags = " + endl
-          + tcp + String.format("      ..%d. .... = ", 0) + endl
-          + tcp + String.format("      ...%d .... = ", 0) + endl
-          + tcp + String.format("      .... %d... = ", 0) + endl
-          + tcp + String.format("      .... .%d.. = ", 0) + endl
-          + tcp + String.format("      .... ..%d. = ", 0) + endl
-          + tcp + String.format("      .... ...%d = ", 0) + endl
+
+          
+          + tcp + "Data offset = " + tcp_off + " bytes" + endl
+          + tcp + "Flags = " + frmtByte(tcp_flags) + endl
+
+            // Build 'flag' matrix by degrementing position variable.
+          + tcp + String.format("      ..%d. .... = ", getBit(tcp_flags[0], flag_cnt--)) + endl
+          + tcp + String.format("      ...%d .... = ", getBit(tcp_flags[0], flag_cnt--)) + endl
+          + tcp + String.format("      .... %d... = ", getBit(tcp_flags[0], flag_cnt--)) + endl
+          + tcp + String.format("      .... .%d.. = ", getBit(tcp_flags[0], flag_cnt--)) + endl
+          + tcp + String.format("      .... ..%d. = ", getBit(tcp_flags[0], flag_cnt--)) + endl
+          + tcp + String.format("      .... ...%d = ", getBit(tcp_flags[0], flag_cnt--)) + endl
           + tcp + "Window = " + tcp_win + endl
           + tcp + "Checksum = " + frmtByte(tcp_check) + endl
           + tcp + "Urgent Pointer = " + tcp_up + endl
@@ -325,6 +336,10 @@ public class packet
         String ip       = "IP:     ";
         String endl     = "\n";
         String frag_msg = ip_frag[1] == 1 ? "do not fragment" : "OK to fragment";
+        String norm     = "normal";
+        String max      = "maximize";
+        String min      = "minimize";
+        int v;
         
         // Print Ether header.
         System.out.println
@@ -339,7 +354,7 @@ public class packet
           + ether + "Ethertype   = " + frmtByte(ether_type, "", "%02x") + " (IP)" + endl
           + ether 
         );
-        
+
         // Print IP header.
         System.out.println
         (
@@ -354,9 +369,16 @@ public class packet
 
             // Next 4 bits are the service bits, last bit is ignored.
             // Get bits at 3rd, 4th, 5th positions of Type of Service byte.
-          + ip + String.format("      ...%d .... = ", getBit(ip_tos, 5)) + endl
-          + ip + String.format("      .... %d... = ", getBit(ip_tos, 4)) + endl
-          + ip + String.format("      .... .%d.. = ", getBit(ip_tos, 3)) + endl
+            // Use ternary operators to fill in blanks (depending on bits).
+          + ip + String.format("      ...%d .... = %s delay", 
+                 v = getBit(ip_tos, 5), (v == 0) ? norm : min) + endl
+
+          + ip + String.format("      .... %d... = %s throughput", 
+                 v = getBit(ip_tos, 4), (v == 0) ? norm : max) + endl
+
+          + ip + String.format("      .... .%d.. = %s reliability", 
+                 v = getBit(ip_tos, 3), (v == 0) ? norm : max) + endl
+
           + ip + "Total length = " + ip_len + " bytes" + endl
           + ip + "Identification = " + ip_id + endl
 
@@ -373,7 +395,7 @@ public class packet
             // Short sits in int, only the 16 right bits are used. Need to left shift 
             // by 16 (unused) bits + 3 (fragment) bits, then shift right using the right
             // unsigned bit shift operator.
-          + ip + "Fragment offset = " + ((ip_off << 19) >>> 19) + " bytes" + endl //TODO
+          + ip + "Fragment offset = " + ((ip_off << 19) >>> 19) + " bytes" + endl
           + ip + "Time to live = " + ip_ttl + " seconds/hops" + endl
           + ip + "Protocol = " + ip_p + String.format(" (%s)", packet_type) + endl
           + ip + "Header checksum = " + frmtByte(ip_check) + endl
@@ -383,6 +405,7 @@ public class packet
           + ip
         );
 
+        // Use protocol-specific print function.
         switch( ip_p )
         {
             case P_NUM_ICMP : printICMP();
@@ -393,10 +416,6 @@ public class packet
 
             case P_NUM_UDP  : printUDP();
                 break;
-
-            default : System.out.format("Unknown protocol: %s\n", ip_p);
-                break;
-
         }
     }
 
