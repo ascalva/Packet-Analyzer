@@ -1,3 +1,13 @@
+/**
+ * @author: Alberto Serrano-Calva
+ *
+ * class:   pktanalyzer
+ *
+ * purpose: Reads in user-defined captured network packet, handles IO
+ *          exceptions, and uses packet class to parse and print
+ *          packet.
+ */
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
