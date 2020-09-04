@@ -10,7 +10,6 @@
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-//import java.util.Arrays;
 
 public class packet
 {   
@@ -42,7 +41,7 @@ public class packet
     private byte    ip_tos;
     private int     ip_len;
     private int     ip_id;
-    private int[]   ip_frag     = new int[3];
+    private int     ip_frag;
     private int     ip_off;
     private int     ip_ttl;
     private int     ip_p;
@@ -78,9 +77,10 @@ public class packet
     /**
      * Parsing functions.
      */
+
+    // Get single bit value (1 or 0) at specific position.
     private int getBit(int val, int pos)
     {
-        // Get single bit value at specified position.
         return (val >>> pos) & 1;
     }
     
@@ -95,9 +95,6 @@ public class packet
     // Parses TCP packet.
     private void parseTCP(ByteBuffer bb)
     {
-        // Record start of header position.
-        int header_pos = bb.position();
-        
         tcp_sport = bb.getShort() & BIT_MASK_SHORT;
         tcp_dport = bb.getShort() & BIT_MASK_SHORT;
 
@@ -114,38 +111,25 @@ public class packet
         tcp_check = bb.getShort() & BIT_MASK_SHORT;
         tcp_up    = bb.getShort() & BIT_MASK_SHORT; 
         
-        // Move position of ByteBuffer to start of header and store
-        // first 64 bytes.
-        bb.position(header_pos);
-        
         // Allocate appropriate amount of data to store first 64 bytes of data.
         // Allocates less if not enough data.
-        tcp_data = new byte[Math.min(DATA_SIZE, packet_size - header_pos)];
+        // NOTE: Doesn't check if there are options.
+        tcp_data  = new byte[Math.min(DATA_SIZE, packet_size - bb.position())];
         bb.get(tcp_data);
     }
     
     // Parses UDP packet.
     private void parseUDP(ByteBuffer bb)
     {
-        // Record start of header position.
-        int header_pos = bb.position();
-
         udp_sport = bb.getShort() & BIT_MASK_SHORT;
         udp_dport = bb.getShort() & BIT_MASK_SHORT;
         udp_len   = bb.getShort() & BIT_MASK_SHORT;
         udp_check = bb.getShort() & BIT_MASK_SHORT;
 
-        // Move position of ByteBuffer to start of header.
-        bb.position(header_pos);
-
         // Allocate appropriate amount of memory to store first 64 bytes of data.
         // Allocates less if not enough data.
-        // TODO: Fix data, example print is a bug, is printing from strt of header
-        udp_data = new byte[Math.min(DATA_SIZE, packet_size - header_pos)];
+        udp_data = new byte[Math.min(DATA_SIZE, packet_size - bb.position())];
         bb.get(udp_data);
-
-        // TODO: Getting additional bytes causes BufferUnderflow exception.
-        //bb.get();
     }
     
     // Parses ethernet header field and IP datagram.
@@ -185,10 +169,7 @@ public class packet
         
         // Get fragment bits, or the first 3 bits from ip_off.
         // Only the last two of the three bits actually matter.
-        // TODO: Get rid of array and store frag in its own int.
-        ip_frag[0] = getBit(ip_off, 15);
-        ip_frag[1] = getBit(ip_off, 14);
-        ip_frag[2] = getBit(ip_off, 13);
+        ip_frag = ip_off >>> 13;
 
         ip_check = bb.getShort() & BIT_MASK_SHORT;
         
@@ -222,6 +203,9 @@ public class packet
     /**
      * Printing functions.
      */
+
+    // Print out every byte's relative position and hex/dec representations.
+    // Used for debugging.
     private static void bytesToHex(byte[] bytes) {
         String text = new String(bytes, StandardCharsets.US_ASCII).replaceAll("\\P{Print}", ".");
 
@@ -297,7 +281,7 @@ public class packet
         (
             icmp + "----- ICMP Header -----" + endl
           + icmp + endl
-          + icmp + "Type = " + icmp_type + " ()" + endl
+          + icmp + "Type = " + icmp_type + " (Echo request)" + endl
           + icmp + "Code = " + icmp_code + endl
           + icmp + "Checksum = " + String.format("0x%04x", icmp_check) + endl
           + icmp
@@ -386,7 +370,6 @@ public class packet
         String ether    = "ETHER:  ";
         String ip       = "IP:     ";
         String endl     = "\n";
-        String frag_msg = ip_frag[1] == 1 ? "do not fragment" : "OK to fragment";
         String norm     = "normal";
         String max      = "maximize";
         String min      = "minimize";
@@ -442,12 +425,15 @@ public class packet
             // In reality: |3-bit flag|13-bit fragment offset|
             // Stored above data as a single short (16 bits).
             // NOTE: Flag value may vary depending if you use the leading 3 vs 4 bits.
-          + ip + "Flags = " + String.format("0x%02x", ip_off >>> 12) + endl 
+          + ip + "Flags = " + String.format("0x%02x", ip_frag) + endl 
             
             // Use the first 3 bits (first one ignored) for fragment info/flag.
-            // TODO: Move ternary operator and remove byte array, create ip_frag int
-          + ip + String.format("      .%d.. .... = %s", ip_frag[1], frag_msg) + endl
-          + ip + String.format("      ..%d. .... = %s", ip_frag[2], "last fragment") + endl
+            // Display fragment type message depending on bit value.
+          + ip + String.format("      .%d.. .... = %s", 
+                 v = getBit(ip_frag, 1), (v == 1) ? "do not fragment" : "OK to fragment") + endl
+
+          + ip + String.format("      ..%d. .... = %s", 
+                 getBit(ip_frag, 0), "last fragment") + endl
 
             // Remove first three bits.
             // Short sits in int, only the 16 right bits are used. Need to left shift 
@@ -459,7 +445,7 @@ public class packet
           + ip + "Header checksum = " + String.format("0x%04x", ip_check) + endl
           + ip + "Source address = " + frmtAddr(ip_src, ".", "%d") + endl
           + ip + "Destination address = " + frmtAddr(ip_dest, ".", "%d") + endl
-          + ip + "No options" + endl
+          + ip + ((ip_opts) ? "There are options" : "No options") + endl
           + ip
         );
 
@@ -478,10 +464,12 @@ public class packet
     }
 
     // Constructor. Automatically initiates packet parsing.
-    // NOTE: Disregards byte array after parsing.
     public packet(byte[] bytes)
     {
+        // Create ByteBuffer object to read binary data easily.
         ByteBuffer bb = ByteBuffer.wrap(bytes);
+
+        // Decode packet and store all relevant information.
         parse(bb);
     }
 }
