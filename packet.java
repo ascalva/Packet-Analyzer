@@ -10,7 +10,7 @@
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+//import java.util.Arrays;
 
 public class packet
 {   
@@ -19,6 +19,7 @@ public class packet
     private static final int  P_NUM_TCP      = 6;
     private static final int  P_NUM_UDP      = 17;
     private static final int  DATA_SIZE      = 64;
+    private static final int  DEF_IP_HL      = 20;
     private static final int  IP_DATAGRAM    = 0x0800;
 
     // Bit masks for converting signed types to unsigned.
@@ -27,51 +28,52 @@ public class packet
     private static final long BIT_MASK_LONG  = 0xFFFFFFFFL;
 
     // Packet Properties.
-    private int    packet_size;
-    private String packet_type;
+    private int     packet_size;
+    private String  packet_type;
 
-    // Ether Header
-    private byte[] ether_dhost = new byte[6];
-    private byte[] ether_shost = new byte[6];
-    private int    ether_type;
+    // Ether Header 
+    private byte[]  ether_dhost = new byte[6];
+    private byte[]  ether_shost = new byte[6];
+    private int     ether_type;
     
     // IP Header
-    private int    ip_ver;
-    private int    ip_hlen;
-    private byte   ip_tos;
-    private int    ip_len;
-    private int    ip_id;
-    private int[]  ip_frag     = new int[3];
-    private int    ip_off;
-    private int    ip_ttl;
-    private int    ip_p;
-    private int    ip_check;
-    private byte[] ip_src      = new byte[4];
-    private byte[] ip_dest     = new byte[4];
+    private int     ip_ver;
+    private int     ip_hlen;
+    private byte    ip_tos;
+    private int     ip_len;
+    private int     ip_id;
+    private int[]   ip_frag     = new int[3];
+    private int     ip_off;
+    private int     ip_ttl;
+    private int     ip_p;
+    private int     ip_check;
+    private byte[]  ip_src      = new byte[4];
+    private byte[]  ip_dest     = new byte[4];
+    private boolean ip_opts     = false;
 
     // ICMP Header
-    private int    icmp_type;
-    private int    icmp_code;
-    private int    icmp_check;
+    private int     icmp_type;
+    private int     icmp_code;
+    private int     icmp_check;
 
     // TCP Header
-    private int    tcp_sport;
-    private int    tcp_dport;
-    private long   tcp_seq_n;
-    private long   tcp_ack_n;
-    private int    tcp_off;
-    private int    tcp_flags;
-    private int    tcp_win;
-    private int    tcp_check;
-    private int    tcp_up;
-    private byte[] tcp_data;
+    private int     tcp_sport;
+    private int     tcp_dport;
+    private long    tcp_seq_n;
+    private long    tcp_ack_n;
+    private int     tcp_off;
+    private int     tcp_flags;
+    private int     tcp_win;
+    private int     tcp_check;
+    private int     tcp_up;
+    private byte[]  tcp_data;
 
     // UDP Header
-    private int    udp_sport;
-    private int    udp_dport;
-    private int    udp_len;
-    private int    udp_check;
-    private byte[] udp_data;
+    private int     udp_sport;
+    private int     udp_dport;
+    private int     udp_len;
+    private int     udp_check;
+    private byte[]  udp_data;
     
     /**
      * Parsing functions.
@@ -138,6 +140,7 @@ public class packet
 
         // Allocate appropriate amount of memory to store first 64 bytes of data.
         // Allocates less if not enough data.
+        // TODO: Fix data, example print is a bug, is printing from strt of header
         udp_data = new byte[Math.min(DATA_SIZE, packet_size - header_pos)];
         bb.get(udp_data);
 
@@ -164,7 +167,14 @@ public class packet
         // Get byte containing version and header length and parse.
         byte vhl = bb.get();
         ip_ver   = vhl >>> 4;
+
+        // Multiply value by 4 (bytes) or 32 bits to compute header length. If more than
+        // 20 bytes, header contains options.
         ip_hlen  = (vhl & 0x0F) * 4;
+
+        // If IP header length is greater than 20 bytes, there are options.
+        int opt_len;
+        if( (opt_len = ip_hlen - DEF_IP_HL) > 0 ) { ip_opts = true; }
 
         ip_tos   = bb.get();
         ip_len   = bb.getShort() & BIT_MASK_SHORT;
@@ -185,6 +195,9 @@ public class packet
         // Store IP addresses in 4-byte arrays.
         bb.get(ip_src);
         bb.get(ip_dest);
+
+        // Move ByteBuffer position forward if there are options available.
+        bb.position(bb.position() + opt_len);
 
         // Parse ICMP/TCP/UDP Header.
         switch( ip_p )
@@ -428,9 +441,11 @@ public class packet
             // Get the value of the first three bits of the fragment offset.
             // In reality: |3-bit flag|13-bit fragment offset|
             // Stored above data as a single short (16 bits).
-          + ip + "Flags = " + String.format("0x%02x", ip_off >>> 12) + endl
+            // NOTE: Flag value may vary depending if you use the leading 3 vs 4 bits.
+          + ip + "Flags = " + String.format("0x%02x", ip_off >>> 12) + endl 
             
             // Use the first 3 bits (first one ignored) for fragment info/flag.
+            // TODO: Move ternary operator and remove byte array, create ip_frag int
           + ip + String.format("      .%d.. .... = %s", ip_frag[1], frag_msg) + endl
           + ip + String.format("      ..%d. .... = %s", ip_frag[2], "last fragment") + endl
 
