@@ -1,6 +1,6 @@
-# Packet Analyzer
+# Packet Analyzer #
 
-## Purpose ##
+### Purpose ###
 * Read in binary file containing ICMP/TCP/UDP packet
 * Decode packet and message
 * Display contents
